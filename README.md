@@ -17,3 +17,8 @@ Appears we are locked to png and ttf.
 \end{figure}
 
 \end{document}
+
+Other things to consider Profiling. 
+Template at current
+
+
