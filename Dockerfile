@@ -1,20 +1,5 @@
 # Build stage
-FROM ubuntu:24.04 AS builder
-
-ARG GO_VERSION=1.24.1
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-    && curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz \
-    && rm -rf /usr/local/go \
-    && tar -C /usr/local -xzf /tmp/go.tar.gz \
-    && rm /tmp/go.tar.gz \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV PATH="/usr/local/go/bin:${PATH}"
+FROM golang:1.24.1-alpine AS builder
 
 WORKDIR /app
 
@@ -22,25 +7,33 @@ COPY go.mod ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app/main .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main .
 
 # Runtime stage
-FROM ubuntu:24.04
+FROM alpine:3.22
 
-# Install only the runtime dependencies needed to compile TikZ/PGFPlots documents
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
+        ca-certificates \
         fontconfig \
-        texlive \
-        texlive-latex-extra \
-        texlive-pictures \
-        fonts-dejavu \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        font-dejavu \
+        texlive-most \
+        texlive-xetex \
+    && addgroup -S app \
+    && adduser -S -G app app \
+    && mkdir -p /tmp/go-latex \
+    && chmod 1777 /tmp/go-latex
+
+ENV TMPDIR=/tmp/go-latex
 
 WORKDIR /app
-
 COPY --from=builder /app/main ./main
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh \
+    && chown app:app /app/main
+
+USER app
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 8080
 
